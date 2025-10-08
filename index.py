@@ -124,25 +124,26 @@ for _, polda in poldas.iterrows():
     # =========================================================
     wb = Workbook()
     ws_polda = wb.active
-    ws_polda.title = "POLDA"
+    
+    # ✅ PERUBAHAN 1: Nama sheet diubah menjadi nama Polda
+    safe_polda_sheet_name = 'POLDA ' + polda_name[:31].replace('/', '-').replace('\\', '-').replace('*', '').replace('?', '').replace(':', '').replace('[', '').replace(']', '')
+    ws_polda.title = safe_polda_sheet_name
 
     # ===================== SHEET POLDA =====================
     if not df_subsatker.empty:
-        # ✅ PERUBAHAN DI SINI: Tambah 1 kolom kosong untuk "Jumlah" per subsatker
         header1 = ["No.", "Jenis Materil"]
         for s in subsatkers:
-            header1 += [s, "", "", ""] # Jadi 4 kolom per subsatker
-        header1 += ["Jumlah Baik", "Jumlah Rusak Ringan", "Jumlah Rusak Berat", "Jumlah Total"]
+            header1 += [s, "", "", ""] 
+        # ✅ PERUBAHAN 2: Kolom grand total di akhir dihapus
+        # header1 += ["Jumlah Baik", "Jumlah Rusak Ringan", "Jumlah Rusak Berat", "Jumlah Total"]
         
         ws_polda.append(header1)
         
         # Merge cells untuk header Subsatker
         for i, _ in enumerate(subsatkers):
-            # ✅ PERUBAHAN DI SINI: Kalkulasi merge disesuaikan
-            start_col = 3 + (i * 4) # Dikali 4
-            ws_polda.merge_cells(start_row=1, start_column=start_col, end_row=1, end_column=start_col + 3) # Ditambah 3
+            start_col = 3 + (i * 4) 
+            ws_polda.merge_cells(start_row=1, start_column=start_col, end_row=1, end_column=start_col + 3)
 
-        # ✅ PERUBAHAN DI SINI: Tambah "Jumlah" di header kedua
         header2 = ["", ""]
         header2 += ["Baik", "Rusak Ringan", "Rusak Berat", "Jumlah"] * len(subsatkers)
         ws_polda.append(header2)
@@ -156,7 +157,8 @@ for _, polda in poldas.iterrows():
 
             for jenis_no, (jenis, jenis_df) in enumerate(group_df.groupby("jenis_materiil", sort=False), start=1):
                 row_data = [jenis_no, jenis]
-                total_baik = total_rr = total_rb = 0
+                # ✅ PERUBAHAN 2: Variabel grand total tidak diperlukan lagi
+                # total_baik = total_rr = total_rb = 0
                 for s in subsatkers:
                     row = jenis_df[jenis_df["subsatker_name"] == s]
                     if not row.empty:
@@ -166,19 +168,19 @@ for _, polda in poldas.iterrows():
                     else:
                         baik = rr = rb = 0
                     
-                    # ✅ PERUBAHAN DI SINI: Hitung jumlah per subsatker
                     jumlah_subsatker = baik + rr + rb
                     
-                    total_baik += baik
-                    total_rr += rr
-                    total_rb += rb
+                    # Variabel akumulasi total dihapus
+                    # total_baik += baik
+                    # total_rr += rr
+                    # total_rb += rb
                     
-                    # ✅ PERUBAHAN DI SINI: Tambahkan jumlah per subsatker ke baris data
                     row_data += [zero_to_empty(baik), zero_to_empty(rr), zero_to_empty(rb), zero_to_empty(jumlah_subsatker)]
 
-                jumlah = total_baik + total_rr + total_rb
+                # ✅ PERUBAHAN 2: Penambahan data grand total ke baris dihapus
+                # jumlah = total_baik + total_rr + total_rb
+                # row_data += [zero_to_empty(total_baik), zero_to_empty(total_rr), zero_to_empty(total_rb), zero_to_empty(jumlah)]
                 
-                row_data += [zero_to_empty(total_baik), zero_to_empty(total_rr), zero_to_empty(total_rb), zero_to_empty(jumlah)]
                 ws_polda.append(row_data)
                 current_row += 1
         
