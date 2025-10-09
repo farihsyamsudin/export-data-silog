@@ -38,7 +38,7 @@ def style_header(ws):
         for cell in ws[row_num]:
             cell.font = Font(bold=True)
             cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    ws.freeze_panes = "A3" # Freeze di bawah header
+    ws.freeze_panes = "C3" # Freeze di bawah header
 
 # =========================================================
 # 4️⃣ Fungsi untuk auto-resize kolom
@@ -151,8 +151,8 @@ for _, polda in poldas.iterrows():
         current_row = 3
         for penggolongan, group_df in df_subsatker.groupby("penggolongan", sort=False):
             # Baris penggolongan
-            ws_polda.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=len(header1))
-            ws_polda.cell(row=current_row, column=1, value=penggolongan).font = Font(bold=True)
+            ws_polda.merge_cells(start_row=current_row, start_column=2, end_row=current_row, end_column=len(header1))
+            ws_polda.cell(row=current_row, column=2, value=penggolongan).font = Font(bold=True)
             current_row += 1
 
             for jenis_no, (jenis, jenis_df) in enumerate(group_df.groupby("jenis_materiil", sort=False), start=1):
@@ -182,6 +182,7 @@ for _, polda in poldas.iterrows():
                 # row_data += [zero_to_empty(total_baik), zero_to_empty(total_rr), zero_to_empty(total_rb), zero_to_empty(jumlah)]
                 
                 ws_polda.append(row_data)
+                ws_polda.cell(row=current_row, column=1).alignment = Alignment(horizontal="center", vertical="center")
                 current_row += 1
         
         style_header(ws_polda)
@@ -229,8 +230,8 @@ for _, polda in poldas.iterrows():
         
         current_row = 2
         for penggolongan, group_df in df_polres.groupby("penggolongan", sort=False):
-            ws_polres.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=len(header_polres))
-            ws_polres.cell(row=current_row, column=1, value=penggolongan).font = Font(bold=True)
+            ws_polres.merge_cells(start_row=current_row, start_column=2, end_row=current_row, end_column=len(header_polres))
+            ws_polres.cell(row=current_row, column=2, value=penggolongan).font = Font(bold=True)
             current_row += 1
 
             for jenis_no, (_, row) in enumerate(group_df.iterrows(), start=1):
@@ -244,6 +245,7 @@ for _, polda in poldas.iterrows():
                     zero_to_empty(baik), zero_to_empty(rr), zero_to_empty(rb), zero_to_empty(jumlah)
                 ]
                 ws_polres.append(row_data)
+                ws_polres.cell(row=current_row, column=1).alignment = Alignment(horizontal="center", vertical="center")
                 current_row += 1
         
         # Style header
