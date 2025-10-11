@@ -115,6 +115,7 @@ for _, polda in poldas.iterrows():
             WHERE ei.owner_type = 'App\\Models\\SubsatkerPolda' AND sp.polda_id = {polda_id}
             GROUP BY ei.equipment_id, sp.name
         ) AS inv ON e.id = inv.equipment_id
+        WHERE e.deleted_at is null
         ORDER BY et.id, e."order";
     """
     df_subsatker = pd.read_sql(subsatker_query, engine)
@@ -187,6 +188,7 @@ for _, polda in poldas.iterrows():
                 WHERE ei.owner_type = 'App\\Models\\Polres' AND ei.owner_id = {polres_id}
                 GROUP BY ei.equipment_id
             ) AS inv ON e.id = inv.equipment_id
+            WHERE e.deleted_at is null
             ORDER BY et.id, e."order";
         """
         df_polres = pd.read_sql(polres_query, engine)
@@ -263,6 +265,7 @@ for _, polda in poldas.iterrows():
                     WHERE ei.owner_type = 'App\\Models\\Polsek' AND ei.owner_id = {polsek_id}
                     GROUP BY ei.equipment_id
                 ) AS inv ON e.id = inv.equipment_id
+                WHERE e.deleted_at is null
                 ORDER BY et.id, e."order";
             """
             df_polsek = pd.read_sql(polsek_query, engine)
