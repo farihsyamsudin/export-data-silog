@@ -57,12 +57,12 @@ os.makedirs(output_dir, exist_ok=True)
 # =========================================================
 # 2️⃣ Fungsi bantu
 # =========================================================
-def style_header(ws):
-    for row_num in [1, 2]:
-        for cell in ws[row_num]:
-            cell.font = Font(bold=True)
-            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    ws.freeze_panes = "C3"
+def style_header_simple(ws):
+    """Fungsi styling baru untuk header tunggal"""
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+    ws.freeze_panes = "A2"
 
 def auto_resize_columns(ws):
     for column in ws.columns:
@@ -83,10 +83,20 @@ def zero_to_empty(value):
     return "" if value == 0 else value
 
 def sanitize_name(name):
-    return name[:31].replace('/', '-').replace('\\', '-').replace('*', '').replace('?', '').replace(':', '').replace('[', '').replace(']', '')
+    return (name
+        .replace('/', '-')
+        .replace('\\', '-')
+        .replace('*', '')
+        .replace('?', '')
+        .replace(':', '')
+        .replace('[', '')
+        .replace(']', '')
+        .replace('.', '')
+        .strip()
+    )
 
 # =========================================================
-# 🏛️ FUNGSI UNTUK SATKER MABES
+# 🏛️ FUNGSI UNTUK SATKER MABES (TELAH DIPERBARUI)
 # =========================================================
 def get_all_children_recursive(satker_id, all_satkers_df):
     """Mendapatkan semua child dari satker secara rekursif (depth-first)"""
@@ -95,7 +105,6 @@ def get_all_children_recursive(satker_id, all_satkers_df):
     
     for _, child in direct_children.iterrows():
         children.append(child)
-        # Rekursif untuk mendapatkan anak-anak dari child ini
         grandchildren = get_all_children_recursive(child['id'], all_satkers_df)
         children.extend(grandchildren)
     
@@ -108,31 +117,22 @@ def get_parent_chain(satker_id, all_satkers_df):
     
     while current_id is not None:
         satker_match = all_satkers_df[all_satkers_df['id'] == current_id]
-        
-        # Jika tidak menemukan satker dengan ID tersebut, hentikan loop
         if satker_match.empty:
             print(f"    ⚠️ Warning: Satker dengan ID {current_id} tidak ditemukan")
             break
-            
         satker = satker_match.iloc[0]
         chain.append(satker['name'])
-        
-        # Handle parent_id yang bisa None atau NaN
         parent_id = satker['parent_id']
         current_id = None if pd.isna(parent_id) else int(parent_id)
-    
-    # Balik urutan agar dari level tertinggi ke terendah
     return list(reversed(chain))
 
 def export_satker_mabes():
-    """Export data Satker Mabes dengan hierarki"""
+    """Export data Satker Mabes dengan hierarki menjadi sheet, tanpa skip data kosong."""
     print("🏛️ Processing Satker Mabes...")
     
-    # Buat folder satker_mabes
     satker_output_dir = os.path.join(output_dir, 'satker_mabes')
     os.makedirs(satker_output_dir, exist_ok=True)
     
-    # Ambil semua satker mabes
     satkers_query = "SELECT id, name, level, parent_id FROM satker_mabes ORDER BY level, name;"
     df_all_satkers = pd.read_sql(satkers_query, engine)
     
@@ -140,110 +140,110 @@ def export_satker_mabes():
         print("⚠️ Tidak ada data Satker Mabes")
         return
     
-    # Process setiap satker
     for _, satker in df_all_satkers.iterrows():
         satker_id = satker['id']
-        satker_name = satker['name']
-        satker_level = satker['level']
         
-        # Dapatkan parent chain untuk nama file
         parent_chain = get_parent_chain(satker_id, df_all_satkers)
-        # Buat nama file sesuai level: Level1_Level2_Level3
         file_display_name = '_'.join(parent_chain)
         
-        print(f"  -> Processing: {satker_name} (Level {satker_level}) -> File: {file_display_name}")
+        print(f"  -> Processing File: {file_display_name}.xlsx")
         
-        # Dapatkan satker ini sendiri + semua children secara rekursif
         all_related_satkers = [satker]
         children = get_all_children_recursive(satker_id, df_all_satkers)
         all_related_satkers.extend(children)
         
-        # Buat list nama untuk header
-        satker_names = [s['name'] for s in all_related_satkers]
-        
-        # Query inventaris untuk satker ini dan semua children-nya
         satker_ids = [s['id'] for s in all_related_satkers]
+        if not satker_ids:
+            continue
         satker_ids_str = ','.join(map(str, satker_ids))
         
+        # Kueri baru yang menjamin semua equipment terdaftar untuk setiap satker
         inventory_query = f"""
+            WITH relevant_satkers AS (
+                SELECT id, name FROM satker_mabes WHERE id IN ({satker_ids_str})
+            )
             SELECT
-                et.id AS penggolongan_id, et.name AS penggolongan,
-                e.name AS jenis_materiil, e."order",
-                inv.satker_name,
+                et.id AS penggolongan_id,
+                et.name AS penggolongan,
+                e.name AS jenis_materiil,
+                e."order",
+                rs.name AS satker_name,
                 COALESCE(inv.baik, 0) AS baik,
                 COALESCE(inv.rusak_ringan, 0) AS rusak_ringan,
                 COALESCE(inv.rusak_berat, 0) AS rusak_berat
             FROM equipments e
             JOIN equipment_types et ON et.id = e.id_equipment_type
+            CROSS JOIN relevant_satkers rs
             LEFT JOIN (
                 SELECT
-                    ei.equipment_id, sm.name AS satker_name,
-                    SUM(ei.baik) AS baik, SUM(ei.rusak_ringan) AS rusak_ringan, SUM(ei.rusak_berat) AS rusak_berat
+                    ei.equipment_id,
+                    ei.owner_id,
+                    SUM(ei.baik) AS baik,
+                    SUM(ei.rusak_ringan) AS rusak_ringan,
+                    SUM(ei.rusak_berat) AS rusak_berat
                 FROM equipment_inventories ei
-                JOIN satker_mabes sm ON sm.id = ei.owner_id
-                WHERE ei.owner_type = 'App\\Models\\SatkerMabes' AND sm.id IN ({satker_ids_str})
-                GROUP BY ei.equipment_id, sm.name
-            ) AS inv ON e.id = inv.equipment_id
-            WHERE e.deleted_at is null
-            ORDER BY et.id, e."order";
+                WHERE ei.owner_type = 'App\\Models\\SatkerMabes' AND ei.owner_id IN ({satker_ids_str})
+                GROUP BY ei.equipment_id, ei.owner_id
+            ) AS inv ON e.id = inv.equipment_id AND rs.id = inv.owner_id
+            WHERE e.deleted_at IS NULL
+            ORDER BY et.id, e."order", rs.name;
         """
-        
         df_inventory = pd.read_sql(inventory_query, engine)
-        
-        # Buat workbook
+
         wb = Workbook()
-        ws = wb.active
-        ws.title = sanitize_name(satker_name)
+        if "Sheet" in wb.sheetnames:
+            wb.remove(wb["Sheet"])
         
-        # Header baris 1
-        header1 = ["No.", "Jenis Materil"]
-        for name in satker_names:
-            header1 += [name, "", "", ""]
-        ws.append(header1)
-        
-        # Merge cells untuk header satker
-        for i, _ in enumerate(satker_names):
-            start_col = 3 + (i * 4)
-            ws.merge_cells(start_row=1, start_column=start_col, end_row=1, end_column=start_col + 3)
-        
-        # Header baris 2
-        header2 = ["", ""]
-        header2 += ["Baik", "Rusak Ringan", "Rusak Berat", "Jumlah"] * len(satker_names)
-        ws.append(header2)
-        
-        current_row = 3
-        for penggolongan, group_df in df_inventory.groupby("penggolongan", sort=False):
-            ws.merge_cells(start_row=current_row, start_column=2, end_row=current_row, end_column=len(header1))
-            ws.cell(row=current_row, column=2, value=penggolongan).font = Font(bold=True)
-            current_row += 1
+        for sheet_satker in all_related_satkers:
+            sheet_name = sheet_satker['name']
             
-            for jenis_no, (jenis, jenis_df) in enumerate(group_df.groupby("jenis_materiil", sort=False), start=1):
-                row_data = [jenis_no, jenis]
-                for name in satker_names:
-                    row = jenis_df[jenis_df["satker_name"] == name]
-                    baik = int(row["baik"].iloc[0]) if not row.empty else 0
-                    rr = int(row["rusak_ringan"].iloc[0]) if not row.empty else 0
-                    rb = int(row["rusak_berat"].iloc[0]) if not row.empty else 0
+            df_sheet_data = df_inventory[df_inventory['satker_name'] == sheet_name].copy()
+            
+            # Buat sheet baru tanpa syarat
+            ws = wb.create_sheet(sanitize_name(sheet_name)[:31])
+            
+            header = ["No.", "Jenis Materil", "Baik", "Rusak Ringan", "Rusak Berat", "Jumlah"]
+            ws.append(header)
+            
+            current_row = 2
+            if not df_sheet_data.empty:
+                for penggolongan, group_df in df_sheet_data.groupby("penggolongan", sort=False):
+                    ws.merge_cells(start_row=current_row, start_column=2, end_row=current_row, end_column=len(header))
+                    ws.cell(row=current_row, column=2, value=penggolongan).font = Font(bold=True)
+                    current_row += 1
                     
-                    jumlah = baik + rr + rb
-                    row_data += [zero_to_empty(baik), zero_to_empty(rr), zero_to_empty(rb), zero_to_empty(jumlah)]
-                
-                ws.append(row_data)
-                ws.cell(row=current_row, column=1).alignment = Alignment(horizontal="center", vertical="center")
-                current_row += 1
-        
-        style_header(ws)
-        auto_resize_columns(ws)
-        
-        # Simpan file dengan nama sesuai hierarki
+                    for jenis_no, (_, row) in enumerate(group_df.iterrows(), start=1):
+                        baik = int(row["baik"])
+                        rr = int(row["rusak_ringan"])
+                        rb = int(row["rusak_berat"])
+                        jumlah = baik + rr + rb
+                        
+                        row_data = [
+                            jenis_no, 
+                            row["jenis_materiil"], 
+                            zero_to_empty(baik), 
+                            zero_to_empty(rr), 
+                            zero_to_empty(rb), 
+                            zero_to_empty(jumlah)
+                        ]
+                        ws.append(row_data)
+                        ws.cell(row=current_row, column=1).alignment = Alignment(horizontal="center", vertical="center")
+                        current_row += 1
+            
+            style_header_simple(ws)
+            auto_resize_columns(ws)
+
+        # Simpan file tanpa syarat
+        print(file_display_name)
         filename = os.path.join(satker_output_dir, f"{sanitize_name(file_display_name)}.xlsx")
         wb.save(filename)
         print(f"    ✅ Saved: {filename}")
-    
+            
     print("✅ Satker Mabes export selesai!\n")
 
+
 # =========================================================
-# 3️⃣ EXPORT POLDA, POLRES, POLSEK (Kode Original)
+# 3️⃣ EXPORT POLDA, POLRES, POLSEK (Kode Original, tidak diubah)
 # =========================================================
 if export_polda or export_polres or export_polsek:
     poldas = pd.read_sql("SELECT id, name FROM polda ORDER BY id", engine)
@@ -262,7 +262,6 @@ if export_polda or export_polres or export_polsek:
         if export_polsek:
             os.makedirs(polsek_output_dir, exist_ok=True)
         
-        # Ambil daftar Subsatker dan Polres
         subsatkers_list_query = f"SELECT name FROM subsatker_poldas WHERE polda_id = {polda_id} ORDER BY name;"
         df_subsatkers_list = pd.read_sql(subsatkers_list_query, engine)
         subsatkers = df_subsatkers_list["name"].tolist()
@@ -270,8 +269,14 @@ if export_polda or export_polres or export_polsek:
         polres_list_query = f"SELECT id AS polres_id, name AS polres_name FROM polres WHERE polda_id = {polda_id} ORDER BY name;"
         df_polres_list = pd.read_sql(polres_list_query, engine)
         
-        # ===== POLDA SHEET =====
         if export_polda:
+            def style_header_polda(ws):
+                for row_num in [1, 2]:
+                    for cell in ws[row_num]:
+                        cell.font = Font(bold=True)
+                        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+                ws.freeze_panes = "C3"
+
             subsatker_query = f"""
                 SELECT
                     et.id AS penggolongan_id, et.name AS penggolongan,
@@ -335,10 +340,9 @@ if export_polda or export_polres or export_polsek:
                         ws_polda.cell(row=current_row, column=1).alignment = Alignment(horizontal="center", vertical="center")
                         current_row += 1
                 
-                style_header(ws_polda)
+                style_header_polda(ws_polda)
                 auto_resize_columns(ws_polda)
             
-            # ===== POLRES SHEETS (di file POLDA) =====
             if export_polres:
                 for _, polres_row in df_polres_list.iterrows():
                     polres_id = polres_row["polres_id"]
@@ -383,18 +387,13 @@ if export_polda or export_polres or export_polsek:
                             ws_polres.cell(row=current_row, column=1).alignment = Alignment(horizontal="center", vertical="center")
                             current_row += 1
                     
-                    for cell in ws_polres[1]:
-                        cell.font = Font(bold=True)
-                        cell.alignment = Alignment(horizontal="center", vertical="center")
-                    ws_polres.freeze_panes = "A2"
+                    style_header_simple(ws_polres)
                     auto_resize_columns(ws_polres)
             
-            # Simpan file POLDA
             polda_filename = os.path.join(polda_output_dir, f"Inventaris_POLDA_{polda_name}.xlsx")
             wb_polda.save(polda_filename)
             print(f"✅ Saved {polda_filename}")
         
-        # ===== POLSEK FILES =====
         if export_polsek:
             for _, polres_row in df_polres_list.iterrows():
                 polres_id = polres_row["polres_id"]
@@ -456,10 +455,7 @@ if export_polda or export_polres or export_polsek:
                             ws_polsek.cell(row=current_row, column=1).alignment = Alignment(horizontal="center", vertical="center")
                             current_row += 1
                     
-                    for cell in ws_polsek[1]:
-                        cell.font = Font(bold=True)
-                        cell.alignment = Alignment(horizontal="center", vertical="center")
-                    ws_polsek.freeze_panes = "A2"
+                    style_header_simple(ws_polsek)
                     auto_resize_columns(ws_polsek)
                 
                 if len(wb_polsek.sheetnames) > 0:
