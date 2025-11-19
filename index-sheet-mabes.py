@@ -157,7 +157,7 @@ def export_satker_mabes():
             continue
         satker_ids_str = ','.join(map(str, satker_ids))
         
-        # Kueri baru yang menjamin semua equipment terdaftar untuk setiap satker
+        # 🔧 FIX: Tambahkan satker_id di SELECT untuk identifier unik
         inventory_query = f"""
             WITH relevant_satkers AS (
                 SELECT id, name FROM satker_mabes WHERE id IN ({satker_ids_str})
@@ -167,6 +167,7 @@ def export_satker_mabes():
                 et.name AS penggolongan,
                 e.name AS jenis_materiil,
                 e."order",
+                rs.id AS satker_id,
                 rs.name AS satker_name,
                 COALESCE(inv.baik, 0) AS baik,
                 COALESCE(inv.rusak_ringan, 0) AS rusak_ringan,
@@ -186,7 +187,7 @@ def export_satker_mabes():
                 GROUP BY ei.equipment_id, ei.owner_id
             ) AS inv ON e.id = inv.equipment_id AND rs.id = inv.owner_id
             WHERE e.deleted_at IS NULL
-            ORDER BY et.id, e."order", rs.name;
+            ORDER BY et.id, e."order", rs.id;
         """
         df_inventory = pd.read_sql(inventory_query, engine)
 
@@ -195,9 +196,11 @@ def export_satker_mabes():
             wb.remove(wb["Sheet"])
         
         for sheet_satker in all_related_satkers:
+            sheet_id = sheet_satker['id']  # 🔧 FIX: Gunakan ID
             sheet_name = sheet_satker['name']
             
-            df_sheet_data = df_inventory[df_inventory['satker_name'] == sheet_name].copy()
+            # 🔧 FIX: Filter berdasarkan satker_id, bukan satker_name
+            df_sheet_data = df_inventory[df_inventory['satker_id'] == sheet_id].copy()
             
             # Buat sheet baru tanpa syarat
             ws = wb.create_sheet(sanitize_name(sheet_name)[:31])
